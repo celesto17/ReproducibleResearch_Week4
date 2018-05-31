@@ -1,0 +1,119 @@
+---
+title: "Reproducible Research - Week 4 Course Project"
+author: "Sanjay Lonkar"
+date: "29 May 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Analysis of Fatalities, Injuries and Property Damage Due to Weather Events
+
+## Synopsis
+Goal of this assignment is to explore the NOAA Storm Database and answer some basic questions about severe weather events:
+
+
+1. Across the United States, which types of events (as indicated in the EVTYPE variable) are most harmful with respect to population health?
+
+2. Across the United States, which types of events have the greatest economic consequences?
+
+A plot is drawn at the end of data analysis for each of the above question. It is used to graphically answer the question. 
+
+### Data
+Data for this project can be downloaded from course website:
+
+* Data [Storm Data](https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2) [47Mb]
+
+There is also some documentation of the database available. Here you will find how some of the variables are constructed/defined.
+
+* National Weather Service [Storm Data Documentation](https://d396qusza40orc.cloudfront.net/repdata%2Fpeer2_doc%2Fpd01016005curr.pdf)
+
+* National Climatic Data Center Storm Events [FAQ](https://d396qusza40orc.cloudfront.net/repdata%2Fpeer2_doc%2FNCDC%20Storm%20Events-FAQ%20Page.pdf)
+
+
+The events in the database start in the year 1950 and end in November 2011. In the earlier years of the database there are generally fewer events recorded, most likely due to a lack of good records. More recent years should be considered more complete.
+
+### Data Processing
+This step is to download dataset from internet and load it into a data frame.
+
+
+```{r echo=TRUE}
+if (!file.exists("./downloadedDataset"))
+{
+ dir.create("./downloadedDataset")
+}
+if (!file.exists ("./downloadedDataset/repdata%2Fdata%2FStormData.csv.bz2")) # This step is to avoid downloading data every time one runs this script
+{
+ datasetURL <- "https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2"
+ download.file (datasetURL, destfile="./downloadedDataset/repdata%2Fdata%2FStormData.csv.bz2")
+}
+
+stormDataSet <- read.csv("./downloadedDataset/repdata%2Fdata%2FStormData.csv.bz2", header = TRUE, sep = ",", quote = "\"")
+```
+
+### Question 1: Across the United States, which types of events (as indicated in the \color{red}{\verb|EVTYPE|}EVTYPE variable) are most harmful with respect to population health?
+
+```{r echo=TRUE}
+# Keep only relevant data variables required for calculating damage caused by disasters
+stormDataRelevant <- stormDataSet [ , c(8, 23:28)]
+
+library (dplyr)
+# Calculate Injuries and Fatalities caused by disaster type. Keep top 20
+totalInjuries <- aggregate (INJURIES ~ EVTYPE, stormDataRelevant, sum)
+totalInjuries <- arrange (totalInjuries, desc(INJURIES))
+totalInjuries <- totalInjuries [1:20, ]
+
+totalFatalities <- aggregate (FATALITIES ~ EVTYPE, stormDataRelevant, sum)
+totalFatalities <- arrange (totalFatalities, desc(FATALITIES))
+totalFatalities <- totalFatalities [1:20, ]
+
+# Merge Injuries and Fatalities datasets
+totalDamage <- merge (totalFatalities, totalInjuries, by.x = "EVTYPE", by.y = "EVTYPE")
+totalDamage <- arrange (totalDamage, desc (FATALITIES + INJURIES))
+namesEvents <- totalDamage$EVTYPE
+```
+
+### Results
+
+Plot shows Injuries and Fatalities caused by various disaster types. It can be interpreted that Tornado has the hightest level of both Injuries and Fatalities.
+
+```{r echo=TRUE}
+barplot (t(totalDamage [,-1]), names.arg = namesEvents, ylim = c (0, 95000), beside = T, cex.names = 0.8, las = 2, col = c("red", "blue"), main ="Maximum Damage by Disaster")
+legend ("topright", c ("Fatalities", "Injuries"), fill = c("red","blue"), bty = "n")
+```
+
+### Question 2: Across the United States, which types of events have the greatest economic consequences?
+
+
+```{r echo=TRUE}
+# Convert property and crop damage into numbers where H=10^2, K=10^3, M =10^6, and B=10^9. For this, we create two new variables: PROPDAMAGE, CROPDAMAGE
+stormDataSet$PROPDAMAGE = 0
+stormDataSet[stormDataSet$PROPDMGEXP == "H", ]$PROPDAMAGE = stormDataSet[stormDataSet$PROPDMGEXP == "H", ]$PROPDMG * 10^2
+stormDataSet[stormDataSet$PROPDMGEXP == "K", ]$PROPDAMAGE = stormDataSet[stormDataSet$PROPDMGEXP == "K", ]$PROPDMG * 10^3
+stormDataSet[stormDataSet$PROPDMGEXP == "M", ]$PROPDAMAGE = stormDataSet[stormDataSet$PROPDMGEXP == "M", ]$PROPDMG * 10^6
+stormDataSet[stormDataSet$PROPDMGEXP == "B", ]$PROPDAMAGE = stormDataSet[stormDataSet$PROPDMGEXP == "B", ]$PROPDMG * 10^9
+
+stormDataSet$CROPDAMAGE = 0
+stormDataSet[stormDataSet$CROPDMGEXP == "H", ]$CROPDAMAGE = stormDataSet[stormDataSet$CROPDMGEXP == "H", ]$CROPDMG * 10^2
+stormDataSet[stormDataSet$CROPDMGEXP == "K", ]$CROPDAMAGE = stormDataSet[stormDataSet$CROPDMGEXP == "K", ]$CROPDMG * 10^3
+stormDataSet[stormDataSet$CROPDMGEXP == "M", ]$CROPDAMAGE = stormDataSet[stormDataSet$CROPDMGEXP == "M", ]$CROPDMG * 10^6
+stormDataSet[stormDataSet$CROPDMGEXP == "B", ]$CROPDAMAGE = stormDataSet[stormDataSet$CROPDMGEXP == "B", ]$CROPDMG * 10^9
+
+# Aggregate property and crop damage into one variable. Arrange and select the top 20
+economic_damage <- aggregate (PROPDAMAGE + CROPDAMAGE ~ EVTYPE, stormDataSet, sum)
+names (economic_damage) = c ("EVENT_TYPE", "TOTAL_DAMAGE")
+economic_damage <- arrange (economic_damage, desc(TOTAL_DAMAGE))
+economic_damage <- economic_damage[1:20, ]
+economic_damage$TOTAL_DAMAGE <- economic_damage$TOTAL_DAMAGE/10^9
+economic_damage$EVENT_TYPE <- factor (economic_damage$EVENT_TYPE, levels = economic_damage$EVENT_TYPE)
+```
+
+### Results
+
+Plot shows damage caused by various disaster types on Property and Crop. It can be interpreted that maximum damage is caused by FLOOD.
+
+```{r echo=TRUE}
+with (economic_damage, barplot(TOTAL_DAMAGE, names.arg = EVENT_TYPE, beside = T, cex.names = 0.8, las=2, col = "red", main = "Total Property and Crop Damage by Top 20 Event Types", ylab = "Total Damage in USD (10^9)"))
+```
